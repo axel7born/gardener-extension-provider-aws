@@ -9,7 +9,7 @@ metadata:
 {{- end }}
   labels:
 {{ include "labels" . | indent 4 }}
-    high-availability-config.resources.gardener.cloud/type: server
+    high-availability-config.resources.gardener.cloud/replicas: 1
 spec:
   revisionHistoryLimit: 5
   replicas: {{ .Values.replicaCount }}
@@ -48,7 +48,15 @@ spec:
         image: {{ include "image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         command:
+        - /dlv
+        - --listen=:40000
+        - --headless=true
+        - --api-version=2
+        - --accept-multiclient
+        - --log
+        - exec
         - /gardener-extension-provider-aws
+        - --
         - --leader-election-resource-lock={{ .Values.leaderElection.resourceLock }}
         - --backupbucket-max-concurrent-reconciles={{ .Values.controllers.backupbucket.concurrentSyncs }}
         - --backupentry-max-concurrent-reconciles={{ .Values.controllers.backupentry.concurrentSyncs }}
@@ -84,18 +92,18 @@ spec:
         - name: IMAGEVECTOR_OVERWRITE
           value: /charts_overwrite/images_overwrite.yaml
         {{- end }}
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: {{ .Values.healthPort }}
-            scheme: HTTP
-          initialDelaySeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: {{ .Values.healthPort }}
-            scheme: HTTP
-          initialDelaySeconds: 5
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: {{ .Values.healthPort }}
+        #     scheme: HTTP
+        #   initialDelaySeconds: 10
+        # readinessProbe:
+        #   httpGet:
+        #     path: /readyz
+        #     port: {{ .Values.healthPort }}
+        #     scheme: HTTP
+        #   initialDelaySeconds: 5
         ports:
         - name: webhook-server
           containerPort: {{ .Values.webhookConfig.serverPort }}
