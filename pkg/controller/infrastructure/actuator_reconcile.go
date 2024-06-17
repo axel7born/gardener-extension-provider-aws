@@ -14,10 +14,12 @@ import (
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	"github.com/gardener/gardener/extensions/pkg/terraformer"
 	"github.com/gardener/gardener/extensions/pkg/util"
+	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -54,6 +56,7 @@ func (a *actuator) Reconcile(ctx context.Context, log logr.Logger, infrastructur
 		a.decoder,
 		infrastructure, terraformer.StateConfigMapInitializerFunc(terraformer.CreateState),
 		a.disableProjectedTokenMount,
+		cluster.Shoot.Spec.Networking.IPFamilies,
 	)
 	if err != nil {
 		return err
@@ -329,6 +332,7 @@ func ReconcileWithTerraformer(
 	infrastructure *extensionsv1alpha1.Infrastructure,
 	stateInitializer terraformer.StateConfigMapInitializer,
 	disableProjectedTokenMount bool,
+	ipFamilies []v1beta1.IPFamily,
 ) (
 	*awsv1alpha1.InfrastructureStatus,
 	*terraformer.RawState,
@@ -344,7 +348,7 @@ func ReconcileWithTerraformer(
 		return nil, nil, util.DetermineError(fmt.Errorf("failed to create new AWS client: %+v", err), helper.KnownCodes)
 	}
 
-	terraformConfig, err := generateTerraformInfraConfig(ctx, infrastructure, infrastructureConfig, awsClient)
+	terraformConfig, err := generateTerraformInfraConfig(ctx, infrastructure, infrastructureConfig, awsClient, ipFamilies)
 	if err != nil {
 		return nil, nil, util.DetermineError(fmt.Errorf("failed to generate Terraform config: %+v", err), helper.KnownCodes)
 	}
@@ -378,7 +382,7 @@ func ReconcileWithTerraformer(
 	return computeProviderStatus(ctx, tf, infrastructureConfig)
 }
 
-func generateTerraformInfraConfig(ctx context.Context, infrastructure *extensionsv1alpha1.Infrastructure, infrastructureConfig *awsapi.InfrastructureConfig, awsClient awsclient.Interface) (map[string]interface{}, error) {
+func generateTerraformInfraConfig(ctx context.Context, infrastructure *extensionsv1alpha1.Infrastructure, infrastructureConfig *awsapi.InfrastructureConfig, awsClient awsclient.Interface, ipFamilies []v1beta1.IPFamily) (map[string]interface{}, error) {
 	var (
 		dhcpDomainName    = "ec2.internal"
 		createVPC         = true
@@ -434,6 +438,13 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 		enableECRAccess = *v
 	}
 
+	isIPv4 := true
+	isIPv6 := false
+	if sets.New[v1beta1.IPFamily](ipFamilies...).Has(v1beta1.IPFamilyIPv6) {
+		isIPv4 = false
+		isIPv6 = true
+	}
+
 	enableDualStack := false
 	if infrastructureConfig.DualStack != nil {
 		enableDualStack = infrastructureConfig.DualStack.Enabled
@@ -452,6 +463,8 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 			"vpc": createVPC,
 		},
 		"enableECRAccess": enableECRAccess,
+		"isIPv4":          isIPv4,
+		"isIPv6":          isIPv6,
 		"dualStack": map[string]interface{}{
 			"enabled": enableDualStack,
 		},

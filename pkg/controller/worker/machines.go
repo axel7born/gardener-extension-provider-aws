@@ -13,9 +13,13 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/gardener/gardener-extension-provider-aws/charts"
+	awsapi "github.com/gardener/gardener-extension-provider-aws/pkg/apis/aws"
+	awsapihelper "github.com/gardener/gardener-extension-provider-aws/pkg/apis/aws/helper"
 	"github.com/gardener/gardener/extensions/pkg/controller"
 	"github.com/gardener/gardener/extensions/pkg/controller/worker"
 	genericworkeractuator "github.com/gardener/gardener/extensions/pkg/controller/worker/genericactuator"
+	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	extensionsv1alpha1helper "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1/helper"
@@ -24,12 +28,9 @@ import (
 	machinev1alpha1 "github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/gardener/gardener-extension-provider-aws/charts"
-	awsapi "github.com/gardener/gardener-extension-provider-aws/pkg/apis/aws"
-	awsapihelper "github.com/gardener/gardener-extension-provider-aws/pkg/apis/aws/helper"
 )
 
 var (
@@ -107,6 +108,13 @@ func (w *workerDelegate) generateMachineConfig(ctx context.Context) error {
 			}
 		}
 
+		infrastructureConfig := &awsapi.InfrastructureConfig{}
+		if w.cluster.Shoot.Spec.Provider.InfrastructureConfig != nil && w.cluster.Shoot.Spec.Provider.InfrastructureConfig.Raw != nil {
+			if _, _, err := w.decoder.Decode(w.cluster.Shoot.Spec.Provider.InfrastructureConfig.Raw, nil, infrastructureConfig); err != nil {
+				return fmt.Errorf("could not decode provider config: %+v", err)
+			}
+		}
+
 		workerPoolHash, err := worker.WorkerPoolHash(pool, w.cluster, computeAdditionalHashData(pool)...)
 		if err != nil {
 			return err
@@ -180,6 +188,17 @@ func (w *workerDelegate) generateMachineConfig(ctx context.Context) error {
 				},
 				"blockDevices":            blockDevices,
 				"instanceMetadataOptions": instanceMetadataOptions,
+			}
+
+			isIPv6 := false
+			if sets.New[v1beta1.IPFamily](w.cluster.Shoot.Spec.Networking.IPFamilies...).Has(v1beta1.IPFamilyIPv6) {
+				isIPv6 = true
+			}
+
+			if infrastructureConfig.DualStack != nil && infrastructureConfig.DualStack.Enabled || isIPv6 {
+				networkInterfaces, _ := machineClassSpec["networkInterfaces"].([]map[string]interface{})
+				networkInterfaces[0]["ipv6AddressCount"] = 1
+				networkInterfaces[0]["ipv6PrefixCount"] = 1
 			}
 
 			if len(infrastructureStatus.EC2.KeyName) > 0 {
