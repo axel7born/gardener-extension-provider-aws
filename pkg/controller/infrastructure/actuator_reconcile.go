@@ -399,6 +399,18 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 		dhcpDomainName = fmt.Sprintf("%s.compute.internal", infrastructure.Spec.Region)
 	}
 
+	isIPv4 := true
+	isIPv6 := false
+	if sets.New[v1beta1.IPFamily](ipFamilies...).Has(v1beta1.IPFamilyIPv6) {
+		isIPv4 = false
+		isIPv6 = true
+	}
+
+	enableDualStack := false
+	if infrastructureConfig.DualStack != nil {
+		enableDualStack = infrastructureConfig.DualStack.Enabled
+	}
+
 	switch {
 	case infrastructureConfig.Networks.VPC.ID != nil:
 		createVPC = false
@@ -410,7 +422,7 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 		vpcID = strconv.Quote(existingVpcID)
 		internetGatewayID = strconv.Quote(existingInternetGatewayID)
 		// if dual stack is enabled, then we wait for until the target VPC has a ipv6 CIDR assigned.
-		if infrastructureConfig.DualStack != nil && infrastructureConfig.DualStack.Enabled {
+		if enableDualStack || isIPv6 {
 			existingIPv6CidrBlock, err := awsClient.WaitForIPv6Cidr(ctx, existingVpcID)
 			if err != nil {
 				return nil, err
@@ -436,18 +448,6 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 	enableECRAccess := true
 	if v := infrastructureConfig.EnableECRAccess; v != nil {
 		enableECRAccess = *v
-	}
-
-	isIPv4 := true
-	isIPv6 := false
-	if sets.New[v1beta1.IPFamily](ipFamilies...).Has(v1beta1.IPFamilyIPv6) {
-		isIPv4 = false
-		isIPv6 = true
-	}
-
-	enableDualStack := false
-	if infrastructureConfig.DualStack != nil {
-		enableDualStack = infrastructureConfig.DualStack.Enabled
 	}
 
 	if tags := infrastructureConfig.IgnoreTags; tags != nil {
