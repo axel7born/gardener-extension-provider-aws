@@ -68,11 +68,11 @@ func (s *shoot) Validate(ctx context.Context, new, old client.Object) error {
 
 func (s *shoot) validateShoot(_ context.Context, shoot *core.Shoot) error {
 	// Network validation
-	if shoot.Spec.Networking != nil {
-		if errList := awsvalidation.ValidateNetworking(shoot.Spec.Networking, field.NewPath("spec", "networking")); len(errList) != 0 {
-			return errList.ToAggregate()
-		}
-	}
+	// if shoot.Spec.Networking != nil {
+	// 	if errList := awsvalidation.ValidateNetworking(shoot.Spec.Networking, field.NewPath("spec", "networking")); len(errList) != 0 {
+	// 		return errList.ToAggregate()
+	// 	}
+	// }
 
 	// Provider validation
 	fldPath := field.NewPath("spec", "provider")
@@ -87,11 +87,11 @@ func (s *shoot) validateShoot(_ context.Context, shoot *core.Shoot) error {
 		return err
 	}
 
-	if shoot.Spec.Networking != nil {
-		if errList := awsvalidation.ValidateInfrastructureConfig(infraConfig, shoot.Spec.Networking.Nodes, shoot.Spec.Networking.Pods, shoot.Spec.Networking.Services); len(errList) != 0 {
-			return errList.ToAggregate()
-		}
-	}
+	// if shoot.Spec.Networking != nil {
+	// 	if errList := awsvalidation.ValidateInfrastructureConfig(infraConfig, shoot.Spec.Networking.Nodes, shoot.Spec.Networking.Pods, shoot.Spec.Networking.Services); len(errList) != 0 {
+	// 		return errList.ToAggregate()
+	// 	}
+	// }
 
 	// ControlPlaneConfig
 	if shoot.Spec.Provider.ControlPlaneConfig != nil {
