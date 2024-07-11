@@ -43,6 +43,7 @@ import (
 	"github.com/gardener/gardener-extension-provider-aws/pkg/controller/healthcheck"
 	awsinfrastructure "github.com/gardener/gardener-extension-provider-aws/pkg/controller/infrastructure"
 	awsworker "github.com/gardener/gardener-extension-provider-aws/pkg/controller/worker"
+	"github.com/gardener/gardener-extension-provider-aws/pkg/features"
 	awscontrolplaneexposure "github.com/gardener/gardener-extension-provider-aws/pkg/webhook/controlplaneexposure"
 )
 
@@ -162,6 +163,10 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 			}
 
 			if err := heartbeatCtrlOpts.Validate(); err != nil {
+				return err
+			}
+
+			if err := features.ExtensionFeatureGate.SetFromMap(configFileOpts.Completed().Config.FeatureGates); err != nil {
 				return err
 			}
 
