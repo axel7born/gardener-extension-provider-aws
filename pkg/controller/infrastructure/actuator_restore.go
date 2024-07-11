@@ -10,6 +10,7 @@ import (
 	extensionscontroller "github.com/gardener/gardener/extensions/pkg/controller"
 	"github.com/gardener/gardener/extensions/pkg/terraformer"
 	"github.com/gardener/gardener/extensions/pkg/util"
+	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	"github.com/go-logr/logr"
 
@@ -32,10 +33,10 @@ func (a *actuator) Restore(ctx context.Context, log logr.Logger, infrastructure 
 		}
 		return a.reconcileWithFlow(ctx, log, infrastructure, flowState)
 	}
-	return a.restoreWithTerraformer(ctx, log, infrastructure)
+	return a.restoreWithTerraformer(ctx, log, infrastructure, cluster.Shoot.Spec.Networking.IPFamilies)
 }
 
-func (a *actuator) restoreWithTerraformer(ctx context.Context, log logr.Logger, infrastructure *extensionsv1alpha1.Infrastructure) error {
+func (a *actuator) restoreWithTerraformer(ctx context.Context, log logr.Logger, infrastructure *extensionsv1alpha1.Infrastructure, ipFamilies []v1beta1.IPFamily) error {
 	terraformState, err := terraformer.UnmarshalRawState(infrastructure.Status.State)
 	if err != nil {
 		return err
@@ -50,6 +51,7 @@ func (a *actuator) restoreWithTerraformer(ctx context.Context, log logr.Logger, 
 		infrastructure,
 		terraformer.CreateOrUpdateState{State: &terraformState.Data},
 		a.disableProjectedTokenMount,
+		ipFamilies,
 	)
 	if err != nil {
 		return err
