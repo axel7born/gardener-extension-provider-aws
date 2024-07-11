@@ -42,6 +42,7 @@ import (
 	apisaws "github.com/gardener/gardener-extension-provider-aws/pkg/apis/aws"
 	"github.com/gardener/gardener-extension-provider-aws/pkg/apis/aws/helper"
 	"github.com/gardener/gardener-extension-provider-aws/pkg/aws"
+	"github.com/gardener/gardener-extension-provider-aws/pkg/features"
 )
 
 const (
@@ -528,7 +529,7 @@ func getControlPlaneChartValues(
 		return nil, err
 	}
 
-	ipam, err := getIPAMChartValues(cpConfig, cp, cluster, checksums, scaledDown)
+	ipam, err := getIPAMChartValues(cp, cluster, checksums, scaledDown)
 	if err != nil {
 		return nil, err
 	}
@@ -570,8 +571,13 @@ func getCCMChartValues(
 		return nil, fmt.Errorf("secret %q not found", cloudControllerManagerServerName)
 	}
 
-	ipamControllerEnabled := cpConfig.IPAMController != nil &&
-		cpConfig.IPAMController.Enabled
+	ipamControllerEnabled := features.ExtensionFeatureGate.Enabled(features.EnableIPAMController)
+	// IPAM Controller is disabled for IPv4
+	if cluster.Shoot.Spec.Networking != nil &&
+		len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 &&
+		cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv4 {
+		ipamControllerEnabled = false
+	}
 
 	values := map[string]interface{}{
 		"enabled":           true,
@@ -634,7 +640,6 @@ func getCRCChartValues(
 
 // getIPAMChartValues collects and returns the ipam-controller chart values.
 func getIPAMChartValues(
-	cpConfig *apisaws.ControlPlaneConfig,
 	cp *extensionsv1alpha1.ControlPlane,
 	cluster *extensionscontroller.Cluster,
 	checksums map[string]string,
@@ -642,20 +647,27 @@ func getIPAMChartValues(
 ) (map[string]interface{}, error) {
 
 	mode := "ipv4"
-	if len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 && cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv6 {
+	if cluster.Shoot.Spec.Networking != nil &&
+		len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 &&
+		cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv6 {
 		mode = "ipv6"
 	}
-	if len(cluster.Shoot.Spec.Networking.IPFamilies) == 2 {
+	if cluster.Shoot.Spec.Networking != nil &&
+		len(cluster.Shoot.Spec.Networking.IPFamilies) == 2 {
 		mode = "dual-stack"
 	}
 
 	nodeCidrMaskSizeIPv4 := int32(24)
 	nodeCidrMaskSizeIPv6 := int32(64)
 	if cluster.Shoot.Spec.Kubernetes.KubeControllerManager != nil && cluster.Shoot.Spec.Kubernetes.KubeControllerManager.NodeCIDRMaskSize != nil {
-		if len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 && cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv4 {
+		if cluster.Shoot.Spec.Networking != nil &&
+			len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 &&
+			cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv4 {
 			nodeCidrMaskSizeIPv4 = *cluster.Shoot.Spec.Kubernetes.KubeControllerManager.NodeCIDRMaskSize
 		}
-		if len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 && cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv6 {
+		if cluster.Shoot.Spec.Networking != nil &&
+			len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 &&
+			cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv6 {
 			nodeCidrMaskSizeIPv6 = *cluster.Shoot.Spec.Kubernetes.KubeControllerManager.NodeCIDRMaskSize
 		}
 	}
@@ -681,8 +693,12 @@ func getIPAMChartValues(
 		"nodeCIDRMaskSizeIPv4": nodeCidrMaskSizeIPv4,
 		"nodeCIDRMaskSizeIPv6": nodeCidrMaskSizeIPv6,
 	}
-	enabled := cpConfig.IPAMController != nil &&
-		cpConfig.IPAMController.Enabled
+	enabled := (cluster.Shoot.Spec.Networking != nil &&
+		(len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 &&
+			cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv6 ||
+			len(cluster.Shoot.Spec.Networking.IPFamilies) == 2)) &&
+		features.ExtensionFeatureGate.Enabled(features.EnableIPAMController)
+
 	if !enabled {
 		values["replicas"] = 0
 	}
@@ -806,8 +822,13 @@ func getControlPlaneShootChartValues(
 		cpConfig.CloudControllerManager.UseCustomRouteController != nil &&
 		*cpConfig.CloudControllerManager.UseCustomRouteController
 
-	ipamControllerEnabled := cpConfig.IPAMController != nil &&
-		cpConfig.IPAMController.Enabled
+	ipamControllerEnabled := features.ExtensionFeatureGate.Enabled(features.EnableIPAMController)
+	// IPAM Controller is disabled for IPv4
+	if cluster.Shoot.Spec.Networking != nil &&
+		len(cluster.Shoot.Spec.Networking.IPFamilies) == 1 &&
+		cluster.Shoot.Spec.Networking.IPFamilies[0] == v1beta1.IPFamilyIPv4 {
+		ipamControllerEnabled = false
+	}
 
 	csiDriverNodeValues := map[string]interface{}{
 		"enabled":           true,
