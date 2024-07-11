@@ -37,15 +37,23 @@ func (a *actuator) Reconcile(ctx context.Context, log logr.Logger, infrastructur
 	if err != nil {
 		return err
 	}
+
+	var ipfamilies []v1beta1.IPFamily
+	if cluster.Shoot.Spec.Networking != nil {
+		ipfamilies = cluster.Shoot.Spec.Networking.IPFamilies
+	} else {
+		ipfamilies = []v1beta1.IPFamily{v1beta1.IPFamilyIPv4}
+	}
+
 	if flowState != nil {
-		return a.reconcileWithFlow(ctx, log, infrastructure, flowState)
+		return a.reconcileWithFlow(ctx, log, infrastructure, flowState, ipfamilies)
 	}
 	if a.shouldUseFlow(infrastructure, cluster) {
 		flowState, err = a.migrateFromTerraformerState(ctx, log, infrastructure)
 		if err != nil {
 			return err
 		}
-		return a.reconcileWithFlow(ctx, log, infrastructure, flowState)
+		return a.reconcileWithFlow(ctx, log, infrastructure, flowState, ipfamilies)
 	}
 
 	infrastructureStatus, state, err := ReconcileWithTerraformer(
@@ -56,7 +64,7 @@ func (a *actuator) Reconcile(ctx context.Context, log logr.Logger, infrastructur
 		a.decoder,
 		infrastructure, terraformer.StateConfigMapInitializerFunc(terraformer.CreateState),
 		a.disableProjectedTokenMount,
-		cluster.Shoot.Spec.Networking.IPFamilies,
+		ipfamilies,
 	)
 	if err != nil {
 		return err
@@ -113,7 +121,7 @@ func (a *actuator) decodeInfrastructureConfig(infrastructure *extensionsv1alpha1
 }
 
 func (a *actuator) createFlowContext(ctx context.Context, log logr.Logger,
-	infrastructure *extensionsv1alpha1.Infrastructure, oldState *infraflow.PersistentState) (*infraflow.FlowContext, error) {
+	infrastructure *extensionsv1alpha1.Infrastructure, oldState *infraflow.PersistentState, ipFamilies []v1beta1.IPFamily) (*infraflow.FlowContext, error) {
 	if oldState.MigratedFromTerraform() && !oldState.TerraformCleanedUp() {
 		err := a.cleanupTerraformerResources(ctx, log, infrastructure)
 		if err != nil {
@@ -161,7 +169,7 @@ func (a *actuator) createFlowContext(ctx context.Context, log logr.Logger,
 		oldFlatState = oldState.ToFlatMap()
 	}
 
-	return infraflow.NewFlowContext(log, awsClient, infrastructure, infrastructureConfig, oldFlatState, persistor)
+	return infraflow.NewFlowContext(log, awsClient, infrastructure, infrastructureConfig, oldFlatState, persistor, ipFamilies)
 }
 
 func (a *actuator) cleanupTerraformerResources(ctx context.Context, log logr.Logger, infrastructure *extensionsv1alpha1.Infrastructure) error {
@@ -177,10 +185,10 @@ func (a *actuator) cleanupTerraformerResources(ctx context.Context, log logr.Log
 }
 
 func (a *actuator) reconcileWithFlow(ctx context.Context, log logr.Logger, infrastructure *extensionsv1alpha1.Infrastructure,
-	oldState *infraflow.PersistentState) error {
+	oldState *infraflow.PersistentState, ipFamilies []v1beta1.IPFamily) error {
 	log.Info("reconcileWithFlow")
 
-	flowContext, err := a.createFlowContext(ctx, log, infrastructure, oldState)
+	flowContext, err := a.createFlowContext(ctx, log, infrastructure, oldState, ipFamilies)
 	if err != nil {
 		return err
 	}
@@ -422,7 +430,6 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 		vpcID = strconv.Quote(existingVpcID)
 		internetGatewayID = strconv.Quote(existingInternetGatewayID)
 
-		
 		// if dual stack is enabled or ipFamily is IPv6, then we wait for until the target VPC has a ipv6 CIDR assigned.
 		if enableDualStack || isIPv6 {
 			existingIPv6CidrBlock, err := awsClient.WaitForIPv6Cidr(ctx, existingVpcID)
@@ -439,9 +446,14 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 	var zones []map[string]interface{}
 	for _, zone := range infrastructureConfig.Networks.Zones {
 		zones = append(zones, map[string]interface{}{
-			"name":                  zone.Name,
-			"worker":                zone.Workers,
-			"public":                zone.Public,
+			"name":   zone.Name,
+			"worker": zone.Workers,
+			"public": func(cidr string) string {
+				if cidr == "" {
+					return "10.0.32.0/20"
+				}
+				return cidr
+			}(zone.Public),
 			"internal":              zone.Internal,
 			"elasticIPAllocationID": zone.ElasticIPAllocationID,
 		})
@@ -451,8 +463,6 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 	if v := infrastructureConfig.EnableECRAccess; v != nil {
 		enableECRAccess = *v
 	}
-
-
 
 	if tags := infrastructureConfig.IgnoreTags; tags != nil {
 		ignoreTagKeys = tags.Keys

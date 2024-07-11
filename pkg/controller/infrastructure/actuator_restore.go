@@ -24,14 +24,14 @@ func (a *actuator) Restore(ctx context.Context, log logr.Logger, infrastructure 
 		return err
 	}
 	if flowState != nil {
-		return a.reconcileWithFlow(ctx, log, infrastructure, flowState)
+		return a.reconcileWithFlow(ctx, log, infrastructure, flowState, cluster.Shoot.Spec.Networking.IPFamilies)
 	}
 	if a.shouldUseFlow(infrastructure, cluster) {
 		flowState, err = a.migrateFromTerraformerState(ctx, log, infrastructure)
 		if err != nil {
 			return util.DetermineError(err, helper.KnownCodes)
 		}
-		return a.reconcileWithFlow(ctx, log, infrastructure, flowState)
+		return a.reconcileWithFlow(ctx, log, infrastructure, flowState, cluster.Shoot.Spec.Networking.IPFamilies)
 	}
 	return a.restoreWithTerraformer(ctx, log, infrastructure, cluster.Shoot.Spec.Networking.IPFamilies)
 }
