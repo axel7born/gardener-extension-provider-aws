@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -409,7 +409,7 @@ func generateTerraformInfraConfig(ctx context.Context, infrastructure *extension
 
 	isIPv4 := true
 	isIPv6 := false
-	if sets.New[v1beta1.IPFamily](ipFamilies...).Has(v1beta1.IPFamilyIPv6) {
+	if slices.Contains(ipFamilies, v1beta1.IPFamilyIPv6) {
 		isIPv4 = false
 		isIPv6 = true
 	}
