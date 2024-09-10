@@ -217,7 +217,7 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlowRecoverState, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -230,7 +230,7 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlowRecoverState, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -242,61 +242,8 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlowRecoverState, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv6})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv6})
 			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should successfully create and delete (terraformer)", func() {
-			providerConfig := newProviderConfig(awsv1alpha1.VPC{
-				CIDR:             ptr.To(vpcCIDR),
-				GatewayEndpoints: []string{s3GatewayEndpoint},
-			})
-
-			namespace, err := generateNamespaceName()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseTerraformer, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should successfully create and delete (terraformer) with IPv6", func() {
-			providerConfig := newProviderConfigConfigureZones(awsv1alpha1.VPC{
-				CIDR:             ptr.To(vpcCIDR),
-				GatewayEndpoints: []string{s3GatewayEndpoint},
-			}, false)
-
-			namespace, err := generateNamespaceName()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseTerraformer, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv6})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should successfully create and delete (terraformer) with dualstack enabled", func() {
-			providerConfig := newProviderConfig(awsv1alpha1.VPC{
-				CIDR:             ptr.To(vpcCIDR),
-				GatewayEndpoints: []string{s3GatewayEndpoint},
-			})
-			providerConfig.DualStack.Enabled = true
-			namespace, err := generateNamespaceName()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseTerraformer, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should successfully create and delete (migration from terraformer)", func() {
-			providerConfig := newProviderConfig(awsv1alpha1.VPC{
-				CIDR:             ptr.To(vpcCIDR),
-				GatewayEndpoints: []string{s3GatewayEndpoint},
-			})
-
-			namespace, err := generateNamespaceName()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuMigrateFromTerraformer, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
-			Expect(err).NotTo(HaveOccurred())
-
 		})
 	})
 
@@ -321,7 +268,7 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlow, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
 			Expect(err).To(HaveOccurred())
 
 			By("verify infrastructure status")
@@ -353,56 +300,7 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseTerraformer, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should successfully create and delete with dualstack enabled", func() {
-			enableDnsHostnames := true
-			assignIPv6CidrBlock := true
-			vpcID, igwID, _, err := integration.CreateVPC(ctx, log, awsClient, vpcCIDR, enableDnsHostnames, assignIPv6CidrBlock, false)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(vpcID).NotTo(BeEmpty())
-			Expect(igwID).NotTo(BeEmpty())
-
-			framework.AddCleanupAction(func() {
-				Expect(integration.DestroyVPC(ctx, log, awsClient, vpcID)).To(Succeed())
-			})
-
-			providerConfig := newProviderConfig(awsv1alpha1.VPC{
-				ID:               &vpcID,
-				GatewayEndpoints: []string{s3GatewayEndpoint},
-			})
-			providerConfig.DualStack.Enabled = true
-
-			namespace, err := generateNamespaceName()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseTerraformer, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should successfully create and delete (flow)", func() {
-			enableDnsHostnames := true
-			assignIPv6CidrBlock := false
-			vpcID, igwID, _, err := integration.CreateVPC(ctx, log, awsClient, vpcCIDR, enableDnsHostnames, assignIPv6CidrBlock, false)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(vpcID).NotTo(BeEmpty())
-			Expect(igwID).NotTo(BeEmpty())
-
-			framework.AddCleanupAction(func() {
-				Expect(integration.DestroyVPC(ctx, log, awsClient, vpcID)).To(Succeed())
-			})
-
-			providerConfig := newProviderConfig(awsv1alpha1.VPC{
-				ID:               &vpcID,
-				GatewayEndpoints: []string{s3GatewayEndpoint},
-			})
-
-			namespace, err := generateNamespaceName()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlow, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -427,7 +325,7 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlow, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv4})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -457,7 +355,7 @@ var _ = Describe("Infrastructure tests", func() {
 			namespace, err := generateNamespaceName()
 			Expect(err).NotTo(HaveOccurred())
 
-			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, fuUseFlow, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv6})
+			err = runTest(ctx, log, c, namespace, providerConfig, decoder, awsClient, []gardencorev1beta1.IPFamily{gardencorev1beta1.IPFamilyIPv6})
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -560,7 +458,7 @@ var _ = Describe("Infrastructure tests", func() {
 })
 
 func runTest(ctx context.Context, log logr.Logger, c client.Client, namespaceName string,
-	providerConfig *awsv1alpha1.InfrastructureConfig, decoder runtime.Decoder, awsClient *awsclient.Client, flow flowUsage, ipfamilies []gardencorev1beta1.IPFamily) error {
+	providerConfig *awsv1alpha1.InfrastructureConfig, decoder runtime.Decoder, awsClient *awsclient.Client, ipfamilies []gardencorev1beta1.IPFamily) error {
 	var (
 		namespace                 *corev1.Namespace
 		cluster                   *extensionsv1alpha1.Cluster
@@ -732,7 +630,7 @@ func runTest(ctx context.Context, log logr.Logger, c client.Client, namespaceNam
 	}
 
 	By("verify infrastructure creation")
-	infrastructureIdentifiers = verifyCreation(ctx, awsClient, infra, providerStatus, providerConfig, ptr.To(vpcCIDR), s3GatewayEndpoint)
+	infrastructureIdentifiers = verifyCreation(ctx, awsClient, infra, providerStatus, providerConfig, ptr.To(vpcCIDR), s3GatewayEndpoint, ipfamilies)
 
 	By("verify tags on subnet")
 	verifyTagsSubnet(ctx, awsClient, taggedSubnetID)
