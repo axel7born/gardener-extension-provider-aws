@@ -236,6 +236,7 @@ var _ = Describe("Infrastructure tests", func() {
 
 		It("should successfully create and delete (flow) with IPv6", func() {
 			providerConfig := newProviderConfigConfigureZones(awsv1alpha1.VPC{
+				CIDR:             ptr.To(vpcCIDR),
 				GatewayEndpoints: []string{s3GatewayEndpoint},
 			}, false)
 
@@ -349,7 +350,7 @@ var _ = Describe("Infrastructure tests", func() {
 			providerConfig := newProviderConfigConfigureZones(awsv1alpha1.VPC{
 				ID:               &vpcID,
 				GatewayEndpoints: []string{s3GatewayEndpoint},
-			}, true) // we need to configure at least a public subnet cidr that fits the vpn range. We can't use a default here.
+			}, false)
 			providerConfig.DualStack.Enabled = true
 
 			namespace, err := generateNamespaceName()
@@ -676,12 +677,7 @@ func newProviderConfigConfigureZones(vpc awsv1alpha1.VPC, configureZoneIPs bool)
 						}
 						return ""
 					}(),
-					Public: func() string {
-						if configureZoneIPs {
-							return "10.250.96.0/22"
-						}
-						return ""
-					}(),
+					Public: "10.250.96.0/22",
 					Workers: func() string {
 						if configureZoneIPs {
 							return "10.250.0.0/19"
@@ -844,7 +840,7 @@ func verifyCreation(
 	Expect(describeVpcsOutput.Vpcs).To(HaveLen(1))
 	Expect(describeVpcsOutput.Vpcs[0].VpcId).To(PointTo(Equal(infraStatus.VPC.ID)))
 	if isIPv6(ipfamilies) && !isIPv4(ipfamilies) && providerConfig.Networks.VPC.ID == nil {
-		cidr = ptr.To("10.0.0.0/16")
+		cidr = ptr.To(vpcCIDR)
 	}
 	Expect(describeVpcsOutput.Vpcs[0].CidrBlock).To(Equal(cidr))
 	if providerConfig.Networks.VPC.CIDR != nil {
