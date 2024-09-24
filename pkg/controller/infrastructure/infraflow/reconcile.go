@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -48,7 +49,8 @@ func (c *FlowContext) Reconcile(ctx context.Context) error {
 	state := c.computeInfrastructureState()
 	egressCIDRs := c.getEgressCIDRs()
 	vpcIPv6CidrBlock := c.state.Get(IdentifierVpcIPv6CidrBlock)
-	return PatchProviderStatusAndState(ctx, c.runtimeClient, c.infra, status, state, egressCIDRs, vpcIPv6CidrBlock)
+	serviceCidr := c.state.Get(IdentifierServiceCIDR)
+	return PatchProviderStatusAndState(ctx, c.runtimeClient, c.infra, status, state, egressCIDRs, vpcIPv6CidrBlock, serviceCidr)
 }
 
 func (c *FlowContext) buildReconcileGraph() *flow.Graph {
@@ -94,6 +96,10 @@ func (c *FlowContext) buildReconcileGraph() *flow.Graph {
 	ensureZones := c.AddTask(g, "ensure zones resources",
 		c.ensureZones,
 		Timeout(defaultLongTimeout), Dependencies(ensureVpc, ensureNodesSecurityGroup, ensureVpcIPv6CidrBloc, ensureMainRouteTable))
+
+	_ = c.AddTask(g, "ensure subnet cidr reservation",
+		c.ensureSubnetCidrReservation,
+		Timeout(defaultLongTimeout), Dependencies(ensureZones))
 
 	_ = c.AddTask(g, "ensure egress CIDRs",
 		c.ensureEgressCIDRs,
@@ -836,6 +842,7 @@ func (c *FlowContext) addZoneReconcileTasks(g *flow.Graph, zone *aws.Zone, depen
 	_ = c.AddTask(g, "ensure VPC endpoints route table associations "+zone.Name,
 		c.ensureVPCEndpointsRoutingTableAssociations(zone.Name),
 		Timeout(defaultTimeout), Dependencies(dependencies...), Dependencies(ensureRoutingTable))
+
 }
 
 func (c *FlowContext) addZoneDeletionTasks(g *flow.Graph, zoneName string) flow.TaskIDer {
@@ -915,6 +922,35 @@ func (c *FlowContext) ensureSubnet(subnetKey string, desired, current *awsclient
 		}
 		return nil
 	}
+}
+
+func (c *FlowContext) ensureSubnetCidrReservation(ctx context.Context) error {
+
+	current, err := c.collectExistingSubnets(ctx)
+	if err != nil {
+		return err
+	}
+
+	cidr, err := cidrSubnet(current[0].Ipv6CidrBlocks[0], 108, 1)
+	if err != nil {
+		return err
+	}
+
+	currentCidrs, err := c.client.GetIPv6CIDRReservations(ctx, current[0])
+	if err != nil {
+		return err
+	}
+
+	if slices.Contains(currentCidrs, cidr) {
+		return nil
+	}
+
+	cidr, err = c.client.CreateCIDRReservation(ctx, current[0], cidr, "explicit")
+	if err != nil {
+		return err
+	}
+	c.state.Set(IdentifierServiceCIDR, cidr)
+	return nil
 }
 
 func (c *FlowContext) ensureElasticIP(zone *aws.Zone) flow.TaskFn {
