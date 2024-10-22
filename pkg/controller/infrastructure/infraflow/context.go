@@ -122,6 +122,7 @@ type Opts struct {
 	AwsClient      awsclient.Interface
 	RuntimeClient  client.Client
 	IPFamilies     []v1beta1.IPFamily
+	Networking     *v1beta1.Networking
 }
 
 // FlowContext contains the logic to reconcile or delete the AWS infrastructure.
@@ -137,6 +138,7 @@ type FlowContext struct {
 	updater       awsclient.Updater
 	commonTags    awsclient.Tags
 	ipFamilies    []v1beta1.IPFamily
+	networking    *v1beta1.Networking
 	*shared.BasicFlowContext
 }
 
@@ -163,6 +165,7 @@ func NewFlowContext(opts Opts) (*FlowContext, error) {
 		client:        opts.AwsClient,
 		runtimeClient: opts.RuntimeClient,
 		ipFamilies:    opts.IPFamilies,
+		networking:    opts.Networking,
 	}
 	flowContext.commonTags = awsclient.Tags{
 		flowContext.tagKeyCluster(): TagValueCluster,
@@ -172,13 +175,14 @@ func NewFlowContext(opts Opts) (*FlowContext, error) {
 }
 
 func (c *FlowContext) persistState(ctx context.Context) error {
-	return PatchProviderStatusAndState(ctx, c.runtimeClient, c.infra, nil, c.computeInfrastructureState(), c.getEgressCIDRs(), c.state.Get(IdentifierVpcIPv6CidrBlock), c.state.Get(IdentifierServiceCIDR))
+	return PatchProviderStatusAndState(ctx, c.runtimeClient, c.infra, c.networking ,nil, c.computeInfrastructureState(), c.getEgressCIDRs(), c.state.Get(IdentifierVpcIPv6CidrBlock), c.state.Get(IdentifierServiceCIDR))
 }
 
 func PatchProviderStatusAndState(
 	ctx context.Context,
 	runtimeClient client.Client,
 	infra *extensionsv1alpha1.Infrastructure,
+	networking *v1beta1.Networking,
 	status *awsv1alpha1.InfrastructureStatus,
 	state *runtime.RawExtension,
 	egressCIDRs []string,
@@ -198,6 +202,17 @@ func PatchProviderStatusAndState(
 				Services: []string{*serviceCIDR},
 			}
 			infra.Status.EgressCIDRs = append(infra.Status.EgressCIDRs, *vpcIPv6CidrBlock)
+		}
+		if networking != nil {
+			if networking.Nodes != nil {
+				infra.Status.Networking.Nodes = append(infra.Status.Networking.Nodes, *networking.Nodes)
+			}
+			if networking.Pods != nil {
+				infra.Status.Networking.Pods = append(infra.Status.Networking.Pods, *networking.Pods)
+			}
+			if networking.Pods != nil {
+				infra.Status.Networking.Services = append(infra.Status.Networking.Services, *networking.Services)
+			}
 		}
 	}
 

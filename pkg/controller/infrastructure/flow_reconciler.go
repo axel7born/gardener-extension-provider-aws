@@ -91,6 +91,7 @@ func (f *FlowReconciler) Reconcile(ctx context.Context, infra *extensionsv1alpha
 		RuntimeClient:  f.client,
 		AwsClient:      awsClient,
 		IPFamilies:     ipfamilies,
+		Networking:     c.Shoot.Spec.Networking,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create flow context: %w", err)
@@ -207,7 +208,7 @@ func (f *FlowReconciler) migrateFromTerraform(ctx context.Context, infra *extens
 		return nil, err
 	}
 
-	if err := infraflow.PatchProviderStatusAndState(ctx, f.client, infra, infrastructureStatus, &runtime.RawExtension{Object: state}, nil, nil, nil); err != nil {
+	if err := infraflow.PatchProviderStatusAndState(ctx, f.client, infra, nil /* TODO. we need the nerworking config from shoot */, infrastructureStatus, &runtime.RawExtension{Object: state}, nil, nil, nil); err != nil {
 		return nil, fmt.Errorf("updating status state failed: %w", err)
 	}
 
